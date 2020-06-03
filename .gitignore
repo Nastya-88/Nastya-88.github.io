@@ -10,5 +10,4 @@ node_modules
 build
 package-lock.json
 npm-debug.*
-source/css/*.css
 Thumbs.db
