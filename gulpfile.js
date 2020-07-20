@@ -1,101 +1,96 @@
 "use strict";
 
-var gulp = require("gulp");
-var sass = require("gulp-sass");
-var plumber = require("gulp-plumber");
-var postcss = require("gulp-postcss");
-var posthtml = require("gulp-posthtml");
-var include = require("posthtml-include")
-var autoprefixer = require("autoprefixer");
-var minify = require("gulp-csso");
-var imagemin = require("gulp-imagemin");
-var rename = require("gulp-rename");
-var server = require("browser-sync").create();
-var run = require("run-sequence");
-var del = require("del");
+const gulp = require("gulp");
+const webpack = require("webpack-stream");
+const browsersync = require("browser-sync");
 
+const dist = "./dist/";
+// const dist = '/Applications/MAMP/htdocs/bytovki';
 
-gulp.task("style", function () {
-  gulp.src("source/sass/style.scss")
-    .pipe(plumber())
-    .pipe(sass())
-    .pipe(postcss([
-      autoprefixer({
-        overrideBrowserslist: [
-          "Android 2.3",
-          "Android >= 4",
-          "Chrome >= 20",
-          "Firefox >= 24",
-          "Explorer >= 10",
-          "iOS >= 6",
-          "Opera >= 11",
-          "Safari >= 4"
+gulp.task("copy-html", () => {
+  return gulp.src("./src/index.html")
+    .pipe(gulp.dest(dist))
+    .pipe(browsersync.stream());
+});
+
+gulp.task("build-js", () => {
+  return gulp.src("./src/js/main.js")
+    .pipe(webpack({
+      mode: 'development',
+      output: {
+        filename: 'script.js'
+      },
+      watch: false,
+      devtool: "source-map",
+      module: {
+        rules: [
+          {
+            test: /\.m?js$/,
+            exclude: /(node_modules|bower_components)/,
+            use: {
+              loader: 'babel-loader',
+              options: {
+                presets: [['@babel/preset-env', {
+                  debug: true,
+                  corejs: 3,
+                  useBuiltIns: "usage"
+                }]]
+              }
+            }
+          }
         ]
-      })
-    ]))
-    .pipe(gulp.dest("build/css"))
-    .pipe(minify())
-    .pipe(rename("style.min.css"))
-    .pipe(gulp.dest("build/css"))
-    .pipe(server.stream());
+      }
+    }))
+    .pipe(gulp.dest(dist))
+    .on("end", browsersync.reload);
 });
 
-
-gulp.task("html", function () {
-  return gulp.src("source/*.html")
-    .pipe(posthtml([
-      include()
-    ]))
-    .pipe(gulp.dest("build"))
-    .pipe(server.stream());
+gulp.task("copy-assets", () => {
+  return gulp.src("./src/assets/**/*.*")
+    .pipe(gulp.dest(dist + "/assets"))
+    .on("end", browsersync.reload);
 });
 
-gulp.task("js", function () {
-  return gulp.src("source/js/*.js")
-    .pipe(gulp.dest("build/js"))
-    .pipe(server.stream());
-});
-
-gulp.task("images", function () {
-  return gulp.src("source/img/**/*.{png,jpg,svg}")
-    .pipe(imagemin([
-      imagemin.optipng({ optimizationLevel: 3 }),
-      imagemin.jpegtran({ progressive: true }),
-      imagemin.svgo()
-    ]))
-    .pipe(gulp.dest("img"));
-});
-
-gulp.task("serve", ['build'], function () {
-  server.init({
-    server: "build/"
+gulp.task("watch", () => {
+  browsersync.init({
+    server: "./dist/",
+    port: 4000,
+    notify: true
   });
-  gulp.watch("source/sass/**/*.scss", ["style"]);
-  gulp.watch("source/*.html", ["html"]);
-  gulp.watch("source/js/*.js", ["js"]);
+
+  gulp.watch("./src/index.html", gulp.parallel("copy-html"));
+  gulp.watch("./src/assets/**/*.*", gulp.parallel("copy-assets"));
+  gulp.watch("./src/js/**/*.js", gulp.parallel("build-js"));
 });
 
-gulp.task("copy", function () {
-  return gulp.src([
-    "source/fonts/**/*.{woff,woff2}",
-    "source/img/**",
-    "source/js/**"
-  ], {
-    base: "source"
-  })
-    .pipe(gulp.dest("build"));
+gulp.task("build", gulp.parallel("copy-html", "copy-assets", "build-js"));
+
+gulp.task("build-prod-js", () => {
+  return gulp.src("./src/js/main.js")
+    .pipe(webpack({
+      mode: 'production',
+      output: {
+        filename: 'script.js'
+      },
+      module: {
+        rules: [
+          {
+            test: /\.m?js$/,
+            exclude: /(node_modules|bower_components)/,
+            use: {
+              loader: 'babel-loader',
+              options: {
+                presets: [['@babel/preset-env', {
+                  corejs: 3,
+                  useBuiltIns: "usage"
+                }]]
+              }
+            }
+          }
+        ]
+      }
+    }))
+    .pipe(gulp.dest(dist));
 });
 
-gulp.task("clean", function () {
-  return del("build");
-})
-
-gulp.task("build", function (done) {
-  run(
-    "clean",
-    "copy",
-    "style",
-    "html",
-    done
-  );
-});
+gulp.task("default", gulp.parallel("watch", "build"));
